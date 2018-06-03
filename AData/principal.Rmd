@@ -1,0 +1,261 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+
+# 1. Prepare Problem
+
+```{r}
+# a) Load libraries
+paquetes <- c(
+  "plotly",
+  "measurements",
+  "forecast",
+  "parallel",
+  "knitr"
+)
+
+sapply(paquetes, function(x){
+  if(!require(x, character.only = T)){
+    install.packages(x)
+    return(require(x, character.only = T))
+  }else{
+    return(T)
+  }
+})
+
+# b) Load dataset
+catalogo_subagencia <- read.csv("data/catalogo_subagencia.csv", stringsAsFactors = F)
+ventas <- read.csv("data/ventas.csv", stringsAsFactors = F)
+
+# c) Split-out validation dataset
+```
+
+
+# 2. Summarize Data
+
+```{r}
+# a) Descriptive statistics
+str(ventas)
+ventas$Mes <- as.Date(x = ventas$Mes, format = "%d/%m/%Y")
+
+historico_total_mensual <- tapply(ventas$Hectolitros, ventas$Mes, FUN = sum)
+historico_total_mensual <- data.frame(x = as.Date(names(historico_total_mensual), format = "%Y-%m-%d"), y = historico_total_mensual)
+
+summary(ventas)
+```
+
+El campo de Hectolitro contiene 0 en el 50% dela información
+```{r}
+ventas_cero <- ventas[ventas$Hectolitros == 0,]
+summary(ventas_cero)
+max_mes_cero <- max(ventas$Mes)
+```
+
+
+```{r}
+summary(catalogo_subagencia)
+
+plot_ly(data = historico_total_mensual, x = ~x, y =~y, mode = "line", type = "scatter") %>% layout(title = "Ventas Historicas de Hectolitros
+", xaxis = list(title = "Hectolitros")
+, yaxis = list(title = "Mes"))
+
+str(catalogo_subagencia)
+
+
+tapply(lista_tiempo[["2013-06-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)[max(tapply(lista_tiempo[["2013-06-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)) == tapply(lista_tiempo[["2013-06-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)]
+
+
+tapply(lista_tiempo[["2013-07-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)[max(tapply(lista_tiempo[["2013-06-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)) == tapply(lista_tiempo[["2013-06-01"]]$Hectolitros, lista_tiempo[["2013-06-01"]]$SKU, sum)]
+
+tapply(lista_tiempo[["2017-07-01"]]$Hectolitros, lista_tiempo[["2017-07-01"]]$SKU, sum)[max(tapply(lista_tiempo[["2017-07-01"]]$Hectolitros, lista_tiempo[["2017-07-01"]]$SKU, sum)) == tapply(lista_tiempo[["2017-07-01"]]$Hectolitros, lista_tiempo[["2017-07-01"]]$SKU, sum)]
+# b) Data visualizations
+#historico_suk_mensual <- data.frame(x = as.Date(names(historico_total_mensual), format = "%Y-%m-%d"), y = historico_total_mensual)
+
+lista_tiempo <- split(ventas[, which(names(ventas) != "Mes")], ventas$Mes)
+lista_SKU <- split(ventas[, which(names(ventas) != "SKU")], ventas$SKU)
+lista_subagencia <- split(ventas[, which(names(ventas) != "Subagencia")], ventas$Subagencia)
+lista_SKU_subagencia <- split(ventas[, which(!names(ventas) %in% c("Subagencia", "SKU"))], paste0(ventas$SKU, "|", ventas$Subagencia))
+top_SKU_agencia_utimos_12_meses <- lapply(lista_SKU, function(x){
+  x <- x[x$Mes >= as.Date("01/03/2017", format = "%d/%m/%Y"), ]
+  x <- x[, -1]
+  attach(x)
+  
+  aux <- aggregate(x, by = list(Subagencia, SKU), FUN = sum)
+  detach(x)
+  aux <- aux[, -c(3,4)]
+  names(aux) <- names(x)
+  aux <- aux[order(aux$Hectolitros, decreasing = T),]
+  return(aux)
+})
+
+
+```
+
+```{r}
+# código para transformar coordenadas
+latitud = conv_unit(catalogo_subagencia$Latitud, to = 'deg_min_sec', from = 'dec_deg')
+longitud  = conv_unit(catalogo_subagencia$Longitud, to = 'deg_min_sec', from = 'dec_deg') 
+write.csv(data.frame(subagencia = catalogo_subagencia$Subagencia, latitud = latitud, longitud = longitud), file = "salidas/coordenadas.csv")
+```
+
+# 3. Prepare Data
+```{r}
+# a) Data Cleaning
+# Localizamos SKU con un historico de valores de hectolitros de sólo ceros.
+SKU_ceros <- sapply(serie_SKU,function(x){
+  sum(x)
+})
+SKU_ceros <- SKU_ceros[SKU_ceros == 0]
+
+#Analizamos la subegerencia en el mar
+subgerencia_pez <- lista_subagencia[['10209']]
+plot(tapply(subgerencia_pez$Hectolitros, subgerencia_pez$Mes, sum))
+#aggregate(subgerencia_pez, by = list(subgerencia_pez$Mes), function(x){
+  
+#})
+
+#se analiza que porcentaje historico ha tenido esta subagencia
+mean(sapply(lista_tiempo, function(x){
+  subagencias <- tapply(x$Hectolitros, x$Subagencia, sum)
+  return(subagencias['10209']/sum(subagencias))
+    #return(subagencias)
+  })
+)
+#quitamos las subagencias con todos sus valores historicos de hectolitros igual a cero
+lista_s_ceros <- lapply(lista_SKU_subagencia, function(x){
+  if(sum(x$Hectolitros) > 0){
+    return(x)
+  }else{
+    return(NULL)
+  }
+})
+
+
+# b) Feature Selection
+
+# c) Data Transforms
+lista_modelo_depurada <- lapply(lista_s_ceros, function(registro){
+  if(is.null(registro))
+    return(NULL)
+  registro <- registro[order(registro$Mes),]
+  registro <- registro[, -1]
+  min_indice <- min(which(registro > 0))
+  if(min_indice > 1)
+    registro[1:(min_indice - 1)] <- NA
+  return(registro)
+
+})
+
+# Calculate the number of cores
+no_cores <- detectCores() - 1
+ 
+# Initiate cluster
+cl <- makeCluster(no_cores)
+
+objeto_ts_modelo <- parLapply(cl, lista_modelo_depurada, function(x){
+i = 1
+    #objeto_ts_modelo <- lapply(lista_modelo_depurada, function(x){
+    #i = 1
+    #x <- lista_modelo_depurada[[523]]
+    #  for(x in lista_modelo_depurada[i:length(lista_modelo_depurada)]){
+            print(x)
+            x <- falla
+            library(forecast)
+            if(is.null(x))
+              return(NULL)
+            if(length(na.omit(x)) < 17){
+              return(NULL)
+            }
+              falla <<- x
+            ajuste <- list()
+            ajuste$data <- x
+            febrero<- x[length(x)]
+            x <- x[-((length(x) - 1):length(x))]
+            ajuste$pronostico <- list()
+            ts_data <- ts(x,start=c(2013,1),frequency=12)
+            ajuste$pronostico$modelo <- ts_data
+            modelo <- auto.arima(ts_data)
+            ajuste$pronostico$modelo <- modelo
+            summary_model <- summary(modelo)
+            ajuste$pronostico$summary <- summary_model
+            pronostico <- forecast(modelo, 4,level=95)
+            ajuste$pronostico$pronostico <- pronostico
+            
+            ajuste$error <- list()
+            x <- x[-length(x)]
+            ts_data <- ts(x,start=c(2013,1),frequency=12)
+            ajuste$error$ts_data <- ts_data
+            order_modelo <- arimaorder(modelo)
+            if(length(order_modelo) == 3){
+              order_modelo <- c(order_modelo, rep(0, 4))
+            }
+            ajuste$error$order_model <- order_modelo
+            modelo <- arima(ts_data, order_modelo[1:3], seasonal = list(order = order_modelo[4:6], period = order_modelo[7]),
+                            method="ML")
+            ajuste$error$modelo <- modelo
+            summary <- summary(modelo)
+            ajuste$error$summary <- summary
+            pronostico <- forecast(modelo, 2,level=95)
+            ajuste$error$pronostico <- pronostico
+            febrero_estimado <- pronostico$mean[2]
+            ajuste$error$error <- abs(febrero - febrero_estimado)/febrero
+            i <<- i +1
+      return(ajuste)
+    })
+
+ventas_febrero <- sapply(objeto_ts_modelo, function(x){
+  x$data[length(x$data )]
+})
+
+distacia_estimacion <- sapply(objeto_ts_modelo, function(x){
+  abs(x$data[length(x$data )] - x$error$pronostico$mean[2])
+})
+
+
+
+stopCluster(cl)
+
+save(objeto_ts_modelo, file = "salidas/ajuste.RData")
+
+error_febrero <- sum(distacia_estimacion)/sum(ventas_febrero)
+
+
+```
+
+Se analiza se se tiene un factor de recargo por el mundial
+```{r}
+ts_total <- ts(historico_total_mensual$y, start = c(2013, 01), frequency = 12)
+  ts_total[-1, ] - ts_total[, -l]
+  matrix(historico_total_mensual$x, 12, 6)
+    matriz_historica <- matrix(historico_total_mensual$y,6, 12, byrow = T)
+    matriz_historica[6, 3:12] <- NA
+    
+    matriz_incrementos_anual <- apply(matriz_historica[-6, ], 1, sum)
+    matriz_incrementos_anual <- (matriz_incrementos_anual[-1] - matriz_incrementos_anual[-5]) / matriz_incrementos_anual[-5]
+    
+ventas_febrero1 <- sapply(objeto_ts_modelo, function(x){
+  x$data[length(x$data )]
+})
+
+distacia_estimacion1 <- sapply(objeto_ts_modelo, function(x){
+  abs(x$data[length(x$data )] - (1 + matriz_incrementos_anual[1]) * x$error$pronostico$mean[2])
+})
+
+sum(distacia_estimacion1)/sum(ventas_febrero1)
+    
+```
+
+#Creamos los archivos para pronosticos
+```{r}
+pronostico <- sapply(objeto_ts_modelo, function(x){
+  return(t(x$pronostico$pronostico$mean[2:4]) * (1 + matriz_incrementos_anual[1]))
+})
+write.csv(t(pronostico), "salidas/pronostico.csv")
+
+````
